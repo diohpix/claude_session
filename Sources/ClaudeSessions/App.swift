@@ -7,6 +7,10 @@ enum Main {
             dump()
             return
         }
+        if CommandLine.arguments.contains("--notify-check") {
+            Notifier.shared.check()
+            return
+        }
         ClaudeSessionsApp.main()
     }
 
@@ -39,7 +43,7 @@ struct ClaudeSessionsApp: App {
     @State private var store = SessionStore()
 
     var body: some Scene {
-        WindowGroup("Claude 세션") {
+        WindowGroup("AI 세션") {
             ContentView()
                 .environment(store)
                 .frame(minWidth: 900, minHeight: 480)

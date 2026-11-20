@@ -43,7 +43,7 @@ struct ContentView: View {
                 )
             }
         }
-        .navigationTitle("Claude 세션")
+        .navigationTitle("AI 세션")
         .confirmationDialog(
             "이 세션을 휴지통으로 옮길까요?",
             isPresented: Binding(get: { store.pendingDelete != nil }, set: { if !$0 { store.pendingDelete = nil } }),

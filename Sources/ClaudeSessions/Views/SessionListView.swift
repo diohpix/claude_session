@@ -98,22 +98,14 @@ struct SourceIcon: View {
     }
 }
 
-/// 세션을 만든 도구(Claude / Codex) 표시.
+/// 세션을 만든 도구(Claude / Codex) 표시. 아이콘만 보이고 이름은 툴팁으로 나온다.
 struct SourceBadge: View {
     let source: SessionSource
 
-    private var color: Color { source == .claude ? .orange : .teal }
-
     var body: some View {
-        HStack(spacing: 3) {
-            SourceIcon(source: source, size: 12)
-            Text(source.title)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(color)
-        }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(color.opacity(0.15), in: Capsule())
+        SourceIcon(source: source, size: 16)
+            .help(source.title)
+            .accessibilityLabel(source.title)
     }
 }
 

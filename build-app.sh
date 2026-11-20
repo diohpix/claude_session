@@ -15,8 +15,8 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key><string>Claude 세션</string>
-    <key>CFBundleDisplayName</key><string>Claude 세션</string>
+    <key>CFBundleName</key><string>AI 세션</string>
+    <key>CFBundleDisplayName</key><string>AI 세션</string>
     <key>CFBundleIdentifier</key><string>local.claude-sessions</string>
     <key>CFBundleExecutable</key><string>ClaudeSessions</string>
     <key>CFBundlePackageType</key><string>APPL</string>
