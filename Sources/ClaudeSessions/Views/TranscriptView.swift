@@ -4,7 +4,7 @@ struct TranscriptView: View {
     @Environment(SessionStore.self) private var store
     let session: SessionSummary
 
-    @State private var messages: [ChatMessage] = []
+    @State private var document: TranscriptDocument?
     @State private var loaded = false
 
     private struct LoadKey: Hashable {
@@ -20,33 +20,26 @@ struct TranscriptView: View {
             if !loaded {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if messages.isEmpty {
-                ContentUnavailableView("대화 내용이 없습니다", systemImage: "text.bubble")
+            } else if let document, !document.isEmpty {
+                TranscriptTextView(document: document)
             } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 14) {
-                        ForEach(messages) { message in
-                            MessageBubble(message: message, source: session.source)
-                        }
-                    }
-                    .padding(16)
-                }
-                .defaultScrollAnchor(.bottom)
+                ContentUnavailableView("대화 내용이 없습니다", systemImage: "text.bubble")
             }
         }
         // 파일이 바뀌면(열린 세션이 진행되면) 다시 읽는다.
         .task(id: LoadKey(path: session.fileURL?.path, modifiedAt: session.modifiedAt, size: session.size)) {
             guard let url = session.fileURL else {
-                messages = []
+                document = nil
                 loaded = true
                 return
             }
             let source = session.source
+            let icon = SourceIcon.appIcon(for: source)
             let parsed = await Task.detached(priority: .userInitiated) {
-                source.messages(url: url)
+                TranscriptDocument(messages: source.messages(url: url), source: source, icon: icon)
             }.value
             guard !Task.isCancelled else { return }
-            messages = parsed
+            document = parsed
             loaded = true
         }
     }
@@ -88,69 +81,5 @@ struct TranscriptView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-    }
-}
-
-private struct MessageBubble: View {
-    let message: ChatMessage
-    let source: SessionSource
-
-    /// 아주 긴 붙여넣기 때문에 화면이 멈추지 않도록 표시 길이를 제한한다.
-    private static let displayLimit = 20_000
-
-    private var rendered: AttributedString {
-        var text = message.text
-        if text.count > Self.displayLimit {
-            text = String(text.prefix(Self.displayLimit)) + "\n\n…(이하 생략)"
-        }
-        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
-    }
-
-    private var toolSummary: String {
-        var order: [String] = []
-        var counts: [String: Int] = [:]
-        for t in message.tools {
-            if counts[t] == nil { order.append(t) }
-            counts[t, default: 0] += 1
-        }
-        return order.map { counts[$0]! > 1 ? "\($0) ×\(counts[$0]!)" : $0 }.joined(separator: ", ")
-    }
-
-    var body: some View {
-        let isUser = message.role == .user
-        HStack(alignment: .top) {
-            if isUser { Spacer(minLength: 60) }
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    if !isUser { SourceIcon(source: source, size: 14) }
-                    Text(isUser ? "나" : source.title)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(isUser ? Color.accentColor : .secondary)
-                    if let ts = message.timestamp {
-                        Text(ts.formatted(date: .numeric, time: .shortened))
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-                if !message.text.isEmpty {
-                    Text(rendered)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                if !message.tools.isEmpty {
-                    Label(toolSummary, systemImage: "wrench.and.screwdriver")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(10)
-            .background(
-                isUser ? Color.accentColor.opacity(0.12) : Color(nsColor: .controlBackgroundColor),
-                in: RoundedRectangle(cornerRadius: 10)
-            )
-            .frame(maxWidth: isUser ? 640 : .infinity, alignment: .leading)
-            if !isUser { Spacer(minLength: 0) }
-        }
     }
 }

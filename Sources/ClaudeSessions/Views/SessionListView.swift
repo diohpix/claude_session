@@ -70,7 +70,7 @@ struct SourceIcon: View {
 
     @MainActor private static var cache: [SessionSource: NSImage?] = [:]
 
-    @MainActor private static func appIcon(for source: SessionSource) -> NSImage? {
+    @MainActor static func appIcon(for source: SessionSource) -> NSImage? {
         if let cached = cache[source] { return cached }
         let bundleIDs: [String]
         switch source {
