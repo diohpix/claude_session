@@ -6,6 +6,8 @@ struct TranscriptView: View {
 
     @State private var document: TranscriptDocument?
     @State private var loaded = false
+    /// 열린 세션이 tterm에서 돌고 있으면 그 tty. 입력창은 이때만 보인다.
+    @State private var ttermTTY: String?
 
     private struct LoadKey: Hashable {
         let path: String?
@@ -25,6 +27,18 @@ struct TranscriptView: View {
             } else {
                 ContentUnavailableView("대화 내용이 없습니다", systemImage: "text.bubble")
             }
+            if let ttermTTY {
+                Divider()
+                MessageComposer(tty: ttermTTY)
+                    .id(ttermTTY)
+            }
+        }
+        .task(id: store.live[session.sessionId]?.pid) {
+            guard let pid = store.live[session.sessionId]?.pid else {
+                ttermTTY = nil
+                return
+            }
+            ttermTTY = await Task.detached { TerminalLauncher.ttermTTY(of: pid) }.value
         }
         // 파일이 바뀌면(열린 세션이 진행되면) 다시 읽는다.
         .task(id: LoadKey(path: session.fileURL?.path, modifiedAt: session.modifiedAt, size: session.size)) {

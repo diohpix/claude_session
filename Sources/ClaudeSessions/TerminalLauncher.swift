@@ -58,30 +58,49 @@ enum TerminalLauncher {
     }
 
     /// 실행 중인 세션을 띄운 터미널 앱을 앞으로 가져온다.
-    /// 세션 프로세스의 부모를 거슬러 올라가 Dock에 보이는 첫 앱을 찾는다.
     /// tterm이면 세션의 tty에 포커스 요청 시퀀스를 써서 해당 창·탭까지 선택하게 한다.
     static func focusTerminal(of pid: Int32) throws {
+        guard let app = hostApp(of: pid) else {
+            throw LaunchError(message: "이 세션을 띄운 터미널 앱을 찾지 못했습니다. (PID \(pid))")
+        }
+        if app.bundleIdentifier == ttermBundleID {
+            requestTtermFocus(sessionPID: pid)
+        }
+        app.activate(options: [])
+    }
+
+    static let ttermBundleID = "com.xiphoid.tterm"
+
+    /// 세션이 tterm에서 돌고 있으면 그 tty 경로(`/dev/ttys012`), 아니면 nil.
+    static func ttermTTY(of pid: Int32) -> String? {
+        guard hostApp(of: pid)?.bundleIdentifier == ttermBundleID else { return nil }
+        return ttyPath(of: pid)
+    }
+
+    /// 세션 프로세스의 부모를 거슬러 올라가 Dock에 보이는 첫 앱(세션을 띄운 터미널 앱)을 찾는다.
+    private static func hostApp(of pid: Int32) -> NSRunningApplication? {
         var current = pid
         for _ in 0..<32 {
-            guard let parent = processInfo(of: current)?.kp_eproc.e_ppid, parent > 1 else { break }
+            guard let parent = processInfo(of: current)?.kp_eproc.e_ppid, parent > 1 else { return nil }
             if let app = NSRunningApplication(processIdentifier: parent), app.activationPolicy == .regular {
-                if app.bundleIdentifier == "com.xiphoid.tterm" {
-                    requestTtermFocus(sessionPID: pid)
-                }
-                app.activate(options: [])
-                return
+                return app
             }
             current = parent
         }
-        throw LaunchError(message: "이 세션을 띄운 터미널 앱을 찾지 못했습니다. (PID \(pid))")
+        return nil
+    }
+
+    private static func ttyPath(of pid: Int32) -> String? {
+        guard let dev = processInfo(of: pid)?.kp_eproc.e_tdev, dev != -1,
+              let name = devname(dev, S_IFCHR) else { return nil }
+        return "/dev/" + String(cString: name)
     }
 
     /// tterm 전용 제어 시퀀스 `ESC _ T focus ESC \` 를 세션의 tty에 쓴다.
     /// tterm은 이 출력을 받은 터미널의 창과 탭을 앞으로 가져온다 (화면에는 아무것도 찍히지 않는다).
     private static func requestTtermFocus(sessionPID pid: Int32) {
-        guard let dev = processInfo(of: pid)?.kp_eproc.e_tdev, dev != -1,
-              let name = devname(dev, S_IFCHR) else { return }
-        let fd = open("/dev/" + String(cString: name), O_WRONLY | O_NOCTTY | O_NONBLOCK)
+        guard let tty = ttyPath(of: pid) else { return }
+        let fd = open(tty, O_WRONLY | O_NOCTTY | O_NONBLOCK)
         guard fd >= 0 else { return }
         defer { close(fd) }
         let sequence: [UInt8] = [0x1B, 0x5F] + Array("Tfocus".utf8) + [0x1B, 0x5C]
