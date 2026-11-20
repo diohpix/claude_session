@@ -12,7 +12,10 @@ struct ContentView: View {
             switch filter ?? .all {
             case .all: break
             case .live: if store.live[s.sessionId] == nil { return false }
-            case .project(let dir): if s.projectDir != dir { return false }
+            case .source(let source): if s.source != source { return false }
+            case .project(let dir, let source):
+                if s.projectDir != dir { return false }
+                if let source, s.source != source { return false }
             }
             guard !q.isEmpty else { return true }
             return [s.title, s.firstPrompt, s.cwd, s.sessionId, s.gitBranch, store.live[s.sessionId]?.name]

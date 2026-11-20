@@ -102,7 +102,7 @@ enum TranscriptParser {
 
     // MARK: - 줄 처리
 
-    private static func forEachLine(in data: Data, _ body: (UnsafeRawBufferPointer) -> Void) {
+    static func forEachLine(in data: Data, _ body: (UnsafeRawBufferPointer) -> Void) {
         data.withUnsafeBytes { (buf: UnsafeRawBufferPointer) in
             guard let base = buf.baseAddress else { return }
             let total = buf.count
@@ -124,13 +124,13 @@ enum TranscriptParser {
         }
     }
 
-    private static func contains(_ line: UnsafeRawBufferPointer, _ marker: [UInt8]) -> Bool {
+    static func contains(_ line: UnsafeRawBufferPointer, _ marker: [UInt8]) -> Bool {
         marker.withUnsafeBytes { m in
             memmem(line.baseAddress, line.count, m.baseAddress, m.count) != nil
         }
     }
 
-    private static func decode(_ line: UnsafeRawBufferPointer) -> [String: Any]? {
+    static func decode(_ line: UnsafeRawBufferPointer) -> [String: Any]? {
         guard let base = line.baseAddress else { return nil }
         let data = Data(bytesNoCopy: UnsafeMutableRawPointer(mutating: base), count: line.count, deallocator: .none)
         return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
@@ -168,12 +168,12 @@ enum TranscriptParser {
         return false
     }
 
-    private static func oneLine(_ text: String, limit: Int) -> String {
+    static func oneLine(_ text: String, limit: Int) -> String {
         let collapsed = text.split(whereSeparator: { $0.isNewline }).joined(separator: " ")
         return collapsed.count > limit ? String(collapsed.prefix(limit)) + "…" : collapsed
     }
 
-    private static func makeISOFormatter() -> ISO8601DateFormatter {
+    static func makeISOFormatter() -> ISO8601DateFormatter {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f

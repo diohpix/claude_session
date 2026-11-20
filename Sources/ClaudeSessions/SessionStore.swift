@@ -6,6 +6,54 @@ enum Scanner {
     static let claudeDir = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude")
     static let projectsDir = claudeDir.appendingPathComponent("projects")
     static let sessionsDir = claudeDir.appendingPathComponent("sessions")
+    static let codexDir = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".codex")
+    static let codexSessionsDir = codexDir.appendingPathComponent("sessions")
+    static let codexIndexFile = codexDir.appendingPathComponent("session_index.jsonl")
+
+    /// Claude와 Codex의 세션 기록을 모두 요약한다 (키는 기록 파일 경로).
+    static func scanAll(cache: [String: SessionSummary]) -> [String: SessionSummary] {
+        scanProjects(cache: cache).merging(scanCodex(cache: cache)) { a, _ in a }
+    }
+
+    /// `~/.codex/sessions/<년>/<월>/<일>/rollout-*.jsonl` 을 요약한다.
+    static func scanCodex(cache: [String: SessionSummary]) -> [String: SessionSummary] {
+        var result: [String: SessionSummary] = [:]
+        let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey]
+        guard let walker = FileManager.default.enumerator(
+            at: codexSessionsDir, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]
+        ) else { return result }
+
+        let titles = codexTitles()
+        for case let file as URL in walker where file.pathExtension == "jsonl" {
+            guard let values = try? file.resourceValues(forKeys: Set(keys)),
+                  values.isRegularFile == true else { continue }
+            let mtime = values.contentModificationDate ?? .distantPast
+            let size = Int64(values.fileSize ?? 0)
+            var s: SessionSummary
+            if let cached = cache[file.path], cached.modifiedAt == mtime, cached.size == size {
+                s = cached
+            } else {
+                s = CodexTranscriptParser.summary(url: file, modifiedAt: mtime, size: size)
+            }
+            // 제목은 기록 파일이 아니라 색인에 있어 따로 바뀔 수 있으므로 매번 다시 붙인다.
+            s.title = titles[s.sessionId]
+            result[file.path] = s
+        }
+        return result
+    }
+
+    /// `session_index.jsonl` 의 세션 ID → 제목. 같은 ID가 여러 번 나오면 마지막 줄이 이긴다.
+    private static func codexTitles() -> [String: String] {
+        guard let data = try? Data(contentsOf: codexIndexFile, options: .mappedIfSafe) else { return [:] }
+        var titles: [String: String] = [:]
+        for line in data.split(separator: 0x0A) {
+            guard let obj = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any],
+                  let id = obj["id"] as? String,
+                  let name = obj["thread_name"] as? String, !name.isEmpty else { continue }
+            titles[id] = name
+        }
+        return titles
+    }
 
     /// 모든 프로젝트의 세션 기록을 요약한다. 크기와 수정 시각이 그대로인 파일은 캐시를 재사용한다.
     static func scanProjects(cache: [String: SessionSummary]) -> [String: SessionSummary] {
@@ -82,7 +130,7 @@ enum Scanner {
                 id: "live:\(sid)",
                 sessionId: sid,
                 fileURL: nil,
-                projectDir: l.cwd.replacingOccurrences(of: "/", with: "-"),
+                projectDir: projectKey(forPath: l.cwd),
                 cwd: l.cwd.isEmpty ? nil : l.cwd,
                 title: l.name.isEmpty ? nil : l.name,
                 startedAt: l.startedAt,
@@ -116,9 +164,10 @@ final class SessionStore {
     @ObservationIgnored private var scanning = false
     @ObservationIgnored private var pending = false
 
-    var projects: [ProjectGroup] {
+    /// 프로젝트 목록. `source` 를 주면 그 도구의 세션이 있는 프로젝트만, 그 도구의 세션 수로 센다.
+    func projects(for source: SessionSource? = nil) -> [ProjectGroup] {
         var groups: [String: (name: String, path: String, count: Int, latest: Date)] = [:]
-        for s in sessions {
+        for s in sessions where source == nil || s.source == source {
             if var g = groups[s.projectDir] {
                 g.count += 1
                 if s.modifiedAt > g.latest {
@@ -137,7 +186,10 @@ final class SessionStore {
 
     func start() {
         guard watcher == nil else { return }
-        watcher = DirectoryWatcher(paths: [Scanner.projectsDir.path, Scanner.sessionsDir.path]) { [weak self] in
+        Notifier.shared.start()
+        watcher = DirectoryWatcher(paths: [
+            Scanner.projectsDir.path, Scanner.sessionsDir.path, Scanner.codexSessionsDir.path,
+        ]) { [weak self] in
             Task { @MainActor in self?.refresh() }
         }
         // 비정상 종료된 세션은 파일 변경 없이 사라지므로 주기적으로도 확인한다.
@@ -176,7 +228,7 @@ final class SessionStore {
         scanning = true
         let cache = self.cache
         Task.detached(priority: .userInitiated) {
-            let summaries = Scanner.scanProjects(cache: cache)
+            let summaries = Scanner.scanAll(cache: cache)
             let live = Scanner.liveSessions()
             let merged = Scanner.merge(summaries, live: live)
             await MainActor.run {
@@ -187,6 +239,15 @@ final class SessionStore {
 
     private func apply(cache: [String: SessionSummary], live: [String: LiveSession], merged: [SessionSummary]) {
         self.cache = cache
+        // 작업 중 → 대기로 바뀐 세션을 알린다.
+        for (sid, now) in live where now.status == "idle" && self.live[sid]?.status == "busy" {
+            let session = merged.first { $0.sessionId == sid }
+            Notifier.shared.sessionBecameIdle(
+                now,
+                title: session?.displayTitle ?? (now.name.isEmpty ? "Claude 세션" : now.name),
+                projectName: session?.projectName ?? (now.cwd as NSString).lastPathComponent
+            )
+        }
         if self.live != live { self.live = live }
         if self.sessions != merged { self.sessions = merged }
         if isLoading { isLoading = false }

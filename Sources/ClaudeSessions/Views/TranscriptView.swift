@@ -26,7 +26,7 @@ struct TranscriptView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 14) {
                         ForEach(messages) { message in
-                            MessageBubble(message: message)
+                            MessageBubble(message: message, source: session.source)
                         }
                     }
                     .padding(16)
@@ -41,8 +41,9 @@ struct TranscriptView: View {
                 loaded = true
                 return
             }
+            let source = session.source
             let parsed = await Task.detached(priority: .userInitiated) {
-                TranscriptParser.messages(url: url)
+                source.messages(url: url)
             }.value
             guard !Task.isCancelled else { return }
             messages = parsed
@@ -55,6 +56,7 @@ struct TranscriptView: View {
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 if let live { StatusBadge(live: live) }
+                SourceBadge(source: session.source)
                 Text(session.displayTitle)
                     .font(.title3.weight(.semibold))
                     .lineLimit(2)
@@ -91,6 +93,7 @@ struct TranscriptView: View {
 
 private struct MessageBubble: View {
     let message: ChatMessage
+    let source: SessionSource
 
     /// 아주 긴 붙여넣기 때문에 화면이 멈추지 않도록 표시 길이를 제한한다.
     private static let displayLimit = 20_000
@@ -120,7 +123,8 @@ private struct MessageBubble: View {
             if isUser { Spacer(minLength: 60) }
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
-                    Text(isUser ? "나" : "Claude")
+                    if !isUser { SourceIcon(source: source, size: 14) }
+                    Text(isUser ? "나" : source.title)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(isUser ? Color.accentColor : .secondary)
                     if let ts = message.timestamp {

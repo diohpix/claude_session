@@ -37,8 +37,10 @@ private struct SessionRow: View {
                 Text(session.displayTitle)
                     .font(.headline)
                     .lineLimit(1)
+                Spacer(minLength: 4)
+                SourceBadge(source: session.source)
             }
-            if session.title != nil, let prompt = session.firstPrompt {
+            if let title = session.title, let prompt = session.firstPrompt, prompt != title {
                 Text(prompt)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -58,6 +60,60 @@ private struct SessionRow: View {
             .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 3)
+    }
+}
+
+/// 도구의 고유 아이콘. 이 Mac에 설치된 Claude / Codex 앱의 아이콘을 빌려 쓰고, 앱이 없으면 기호로 대신한다.
+struct SourceIcon: View {
+    let source: SessionSource
+    var size: CGFloat = 16
+
+    @MainActor private static var cache: [SessionSource: NSImage?] = [:]
+
+    @MainActor private static func appIcon(for source: SessionSource) -> NSImage? {
+        if let cached = cache[source] { return cached }
+        let bundleIDs: [String]
+        switch source {
+        case .claude: bundleIDs = ["com.anthropic.claudefordesktop"]
+        case .codex: bundleIDs = ["com.openai.codex", "com.openai.chat"]
+        }
+        let icon = bundleIDs.lazy
+            .compactMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }
+            .first
+            .map { NSWorkspace.shared.icon(forFile: $0.path) }
+        cache[source] = icon
+        return icon
+    }
+
+    var body: some View {
+        if let icon = Self.appIcon(for: source) {
+            Image(nsImage: icon)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: size, height: size)
+        } else {
+            Image(systemName: source == .claude ? "sparkle" : "chevron.left.forwardslash.chevron.right")
+                .frame(width: size, height: size)
+        }
+    }
+}
+
+/// 세션을 만든 도구(Claude / Codex) 표시.
+struct SourceBadge: View {
+    let source: SessionSource
+
+    private var color: Color { source == .claude ? .orange : .teal }
+
+    var body: some View {
+        HStack(spacing: 3) {
+            SourceIcon(source: source, size: 12)
+            Text(source.title)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(color)
+        }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(color.opacity(0.15), in: Capsule())
     }
 }
 

@@ -5,6 +5,7 @@ struct SidebarView: View {
     @Binding var selection: SidebarItem?
 
     var body: some View {
+        let activeSource = selection?.activeSource
         List(selection: $selection) {
             Section {
                 Label("전체 세션", systemImage: "tray.full")
@@ -14,8 +15,15 @@ struct SidebarView: View {
                     .badge(store.live.count)
                     .tag(SidebarItem.live)
             }
-            Section("프로젝트") {
-                ForEach(store.projects) { project in
+            Section("도구") {
+                ForEach(SessionSource.allCases, id: \.self) { source in
+                    Label { Text(source.title) } icon: { SourceIcon(source: source, size: 18) }
+                        .badge(store.sessions.count { $0.source == source })
+                        .tag(SidebarItem.source(source))
+                }
+            }
+            Section(activeSource.map { "프로젝트 · \($0.title)" } ?? "프로젝트") {
+                ForEach(store.projects(for: activeSource)) { project in
                     Label {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(project.name)
@@ -30,7 +38,7 @@ struct SidebarView: View {
                         Image(systemName: "folder")
                     }
                     .badge(project.count)
-                    .tag(SidebarItem.project(project.id))
+                    .tag(SidebarItem.project(project.id, activeSource))
                     .help(project.path)
                 }
             }

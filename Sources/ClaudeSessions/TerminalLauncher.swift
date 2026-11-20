@@ -25,7 +25,7 @@ enum TerminalLauncher {
         var errorDescription: String? { message }
     }
 
-    /// 세션의 작업 폴더에서 `claude --resume <id>` 를 새 터미널 창으로 실행한다.
+    /// 세션의 작업 폴더에서 `claude --resume <id>` (Codex는 `codex resume <id>`) 를 새 터미널 창으로 실행한다.
     static func resume(_ session: SessionSummary, in app: TerminalApp) throws {
         guard let cwd = session.cwd else {
             throw LaunchError(message: "이 세션의 작업 폴더를 알 수 없습니다.")
@@ -34,14 +34,14 @@ enum TerminalLauncher {
         guard FileManager.default.fileExists(atPath: cwd, isDirectory: &isDir), isDir.boolValue else {
             throw LaunchError(message: "작업 폴더가 더 이상 존재하지 않습니다.\n\(cwd)")
         }
-        let command = "claude --resume \(session.sessionId)"
+        let command = session.source.resumeInvocation(sessionId: session.sessionId)
 
         switch app {
         case .tterm, .terminal:
             // 두 앱 모두 `.command` 스크립트를 열면 새 창에서 실행한다.
             let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ClaudeSessions", isDirectory: true)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let script = dir.appendingPathComponent("resume-\(session.sessionId).command")
+            let script = dir.appendingPathComponent("resume-\(projectKey(forPath: session.sessionId)).command")
             // 로그인+대화형 셸로 실행해 사용자의 PATH 설정(.zshrc 등)이 적용되게 한다.
             let body = "#!/bin/zsh\ncd \(shellQuote(cwd)) || exit 1\nexec /bin/zsh -ilc \(shellQuote(command))\n"
             try body.write(to: script, atomically: true, encoding: .utf8)
