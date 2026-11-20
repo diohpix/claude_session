@@ -32,6 +32,9 @@ private enum Metrics {
     static let panelPadding: CGFloat = 10
     static let listStep: CGFloat = 18
     static let markerWidth: CGFloat = 22
+    /// 본문 줄 높이 배율. 글꼴 기본 줄 높이는 한글이 빽빽해 보여서 조금 띄운다.
+    static let lineHeight: CGFloat = 1.35
+    static let codeLineHeight: CGFloat = 1.2
 }
 
 /// 화면에 그릴 준비가 끝난 대화 내용.
@@ -194,7 +197,11 @@ private struct Builder {
             for line in lines.isEmpty ? [""] : lines {
                 rows.append(NSAttributedString(string: line, attributes: [.font: code, .foregroundColor: NSColor.labelColor]))
             }
-            panel(rows, styles: rows.map { _ in style() })
+            panel(rows, styles: rows.map { _ in
+                let style = style()
+                style.lineHeightMultiple = Metrics.codeLineHeight
+                return style
+            })
 
         case .table(let header, let rows):
             let bold = NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
@@ -267,6 +274,7 @@ private struct Builder {
         style.paragraphSpacingBefore = before
         style.paragraphSpacing = after
         style.lineBreakMode = .byWordWrapping
+        style.lineHeightMultiple = Metrics.lineHeight
         return style
     }
 
