@@ -485,8 +485,18 @@ struct TranscriptTextView: NSViewRepresentable {
     }
 }
 
-/// 복사할 때 서식과 아이콘 자리 글자를 빼고 글만 넘긴다.
 private final class TranscriptNSTextView: NSTextView {
+    // 말풍선 · 코드 블록 배경은 글의 줄바꿈이 그대로여도 너비에 따라 달라진다.
+    // 창 크기를 끄는 동안 AppKit 은 새로 드러난 부분만 다시 그리므로, 너비가 바뀌면 전체를 다시 그리게 한다.
+    override var preservesContentDuringLiveResize: Bool { false }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        let widthChanged = newSize.width != frame.width
+        super.setFrameSize(newSize)
+        if widthChanged { needsDisplay = true }
+    }
+
+    /// 복사할 때 서식과 아이콘 자리 글자를 빼고 글만 넘긴다.
     override func copy(_ sender: Any?) {
         guard let storage = textStorage else { return }
         let text = selectedRanges
