@@ -9,6 +9,7 @@ APP="ClaudeSessions.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/ClaudeSessions "$APP/Contents/MacOS/ClaudeSessions"
+cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"  # scripts/make-icon.swift 로 생성
 
 # 빌드하는 Mac에 설치된 Claude / Codex 앱의 아이콘을 번들에 담아 둔다.
 # 그래야 해당 앱이 없는 PC에서도 같은 아이콘이 보인다.
@@ -42,6 +43,7 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
     <key>CFBundleDisplayName</key><string>AI 세션</string>
     <key>CFBundleIdentifier</key><string>local.claude-sessions</string>
     <key>CFBundleExecutable</key><string>ClaudeSessions</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>1.0</string>
     <key>CFBundleVersion</key><string>1</string>
