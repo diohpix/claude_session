@@ -3,7 +3,7 @@ import SwiftUI
 struct SessionListView: View {
     @Environment(SessionStore.self) private var store
     let sessions: [SessionSummary]
-    @Binding var selection: SessionSummary.ID?
+    @Binding var selection: Set<SessionSummary.ID>
 
     var body: some View {
         Group {
@@ -15,9 +15,24 @@ struct SessionListView: View {
             } else {
                 List(sessions, selection: $selection) { session in
                     SessionRow(session: session, live: store.live[session.sessionId])
-                        .contextMenu { SessionActions(session: session, live: store.live[session.sessionId]) }
                 }
                 .listStyle(.inset)
+                .contextMenu(forSelectionType: SessionSummary.ID.self) { ids in
+                    let picked = sessions.filter { ids.contains($0.id) }
+                    if picked.count == 1, let session = picked.first {
+                        SessionActions(session: session, live: store.live[session.sessionId])
+                    } else if !picked.isEmpty {
+                        let deletable = store.deletable(picked)
+                        Button("\(deletable.count)개 세션을 휴지통으로 이동…", systemImage: "trash", role: .destructive) {
+                            store.pendingDelete = deletable
+                        }
+                        .disabled(deletable.isEmpty)
+                    }
+                }
+                .onDeleteCommand {
+                    let deletable = store.deletable(sessions.filter { selection.contains($0.id) })
+                    if !deletable.isEmpty { store.pendingDelete = deletable }
+                }
             }
         }
         .navigationSubtitle("\(sessions.count)개 세션")
@@ -177,7 +192,7 @@ struct SessionActions: View {
         Divider()
 
         Button("휴지통으로 이동…", systemImage: "trash", role: .destructive) {
-            store.pendingDelete = session
+            store.pendingDelete = [session]
         }
         .disabled(isLive || session.fileURL == nil)
         .help(isLive ? "실행 중인 세션은 삭제할 수 없습니다" : "세션 기록을 휴지통으로 옮깁니다")

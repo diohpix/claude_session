@@ -154,8 +154,8 @@ final class SessionStore {
     private(set) var sessions: [SessionSummary] = []
     private(set) var live: [String: LiveSession] = [:]
     private(set) var isLoading = true
-    /// 삭제 확인을 기다리는 세션 (확인 창은 ContentView가 띄운다).
-    var pendingDelete: SessionSummary?
+    /// 삭제 확인을 기다리는 세션들 (확인 창은 ContentView가 띄운다).
+    var pendingDelete: [SessionSummary] = []
     var errorMessage: String?
 
     @ObservationIgnored private var cache: [String: SessionSummary] = [:]
@@ -199,24 +199,42 @@ final class SessionStore {
         refresh()
     }
 
-    /// 세션 기록 파일과 같은 이름의 부속 폴더를 휴지통으로 옮긴다. 실행 중인 세션은 거부한다.
-    func delete(_ session: SessionSummary) {
-        guard let url = session.fileURL else { return }
-        guard Scanner.liveSessions()[session.sessionId] == nil else {
-            errorMessage = "실행 중인 세션은 삭제할 수 없습니다. 먼저 세션을 종료해 주세요."
-            return
-        }
+    /// 휴지통으로 옮길 수 있는 세션만 고른다 (실행 중이거나 기록 파일이 없는 세션 제외).
+    func deletable(_ sessions: [SessionSummary]) -> [SessionSummary] {
+        sessions.filter { live[$0.sessionId] == nil && $0.fileURL != nil }
+    }
+
+    /// 세션 기록 파일과 같은 이름의 부속 폴더를 휴지통으로 옮긴다. 실행 중인 세션은 건너뛴다.
+    func delete(_ sessions: [SessionSummary]) {
+        let live = Scanner.liveSessions()
         let fm = FileManager.default
-        do {
-            try fm.trashItem(at: url, resultingItemURL: nil)
-            let sidecar = url.deletingPathExtension()
-            var isDir: ObjCBool = false
-            if fm.fileExists(atPath: sidecar.path, isDirectory: &isDir), isDir.boolValue {
-                try fm.trashItem(at: sidecar, resultingItemURL: nil)
+        var skipped: [String] = []
+        var failures: [String] = []
+        for session in sessions {
+            guard let url = session.fileURL else { continue }
+            guard live[session.sessionId] == nil else {
+                skipped.append(session.displayTitle)
+                continue
             }
-        } catch {
-            errorMessage = "삭제하지 못했습니다.\n\(error.localizedDescription)"
+            do {
+                try fm.trashItem(at: url, resultingItemURL: nil)
+                let sidecar = url.deletingPathExtension()
+                var isDir: ObjCBool = false
+                if fm.fileExists(atPath: sidecar.path, isDirectory: &isDir), isDir.boolValue {
+                    try fm.trashItem(at: sidecar, resultingItemURL: nil)
+                }
+            } catch {
+                failures.append("\(session.displayTitle): \(error.localizedDescription)")
+            }
         }
+        var messages: [String] = []
+        if !skipped.isEmpty {
+            messages.append("실행 중인 세션은 삭제하지 않았습니다. 먼저 세션을 종료해 주세요.\n" + skipped.joined(separator: "\n"))
+        }
+        if !failures.isEmpty {
+            messages.append("삭제하지 못했습니다.\n" + failures.joined(separator: "\n"))
+        }
+        if !messages.isEmpty { errorMessage = messages.joined(separator: "\n\n") }
         refresh()
     }
 
