@@ -203,30 +203,19 @@ private struct Builder {
                 return style
             })
 
-        case .table(let header, let rows):
+        case .table(let header, let alignments, let rows):
             let bold = NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
-            let cells = [header.map { inline($0, font: bold) }] + rows.map { $0.map { inline($0, font: body) } }
-            // 칸 너비에 맞춘 탭 위치로 열을 맞춘다.
-            var stops: [NSTextTab] = []
-            var x = leading + Metrics.panelPadding
-            for column in header.indices.dropLast() {
-                let width = cells.map { column < $0.count ? ceil($0[column].size().width) : 0 }.max() ?? 0
-                x += min(width, 420) + 20
-                stops.append(NSTextTab(textAlignment: .left, location: x))
-            }
-            let lines: [NSAttributedString] = cells.map { row in
-                let line = NSMutableAttributedString()
-                for (index, cell) in row.enumerated() {
-                    if index > 0 { line.append(NSAttributedString(string: "\t", attributes: [.font: body])) }
-                    line.append(cell)
-                }
-                return line
-            }
-            panel(lines, styles: lines.indices.map { index in
-                let style = style(before: 2, after: index == 0 ? 5 : 2)
-                style.tabStops = stops
-                return style
-            })
+            let attachment = TableAttachment(
+                header: header.map { inline($0, font: bold) },
+                rows: rows.map { $0.map { inline($0, font: body) } },
+                alignments: alignments,
+                source: (header, rows))
+            // 첨부 줄은 본문 줄 높이 배율을 쓰지 않는다 (표 높이만큼 위가 벌어진다).
+            let style = style(before: 6, after: 6)
+            style.lineHeightMultiple = 1
+            let line = NSMutableAttributedString(attachment: attachment)
+            line.addAttribute(.font, value: small, range: NSRange(location: 0, length: line.length))
+            paragraph(line, style: style)
 
         case .rule:
             let style = style()
@@ -508,7 +497,16 @@ private final class TranscriptNSTextView: NSTextView {
     override func copy(_ sender: Any?) {
         guard let storage = textStorage else { return }
         let text = selectedRanges
-            .map { storage.attributedSubstring(from: $0.rangeValue).string }
+            .map { range -> String in
+                // 표 첨부 자리에는 마크다운 표 원문을 넣는다.
+                let part = NSMutableAttributedString(attributedString: storage.attributedSubstring(from: range.rangeValue))
+                part.enumerateAttribute(.attachment, in: NSRange(location: 0, length: part.length), options: .reverse) { value, range, _ in
+                    if let table = value as? TableAttachment {
+                        part.replaceCharacters(in: range, with: table.markdown)
+                    }
+                }
+                return part.string
+            }
             .joined(separator: "\n")
             .replacingOccurrences(of: "\u{FFFC} ", with: "")
             .replacingOccurrences(of: "\u{FFFC}", with: "")

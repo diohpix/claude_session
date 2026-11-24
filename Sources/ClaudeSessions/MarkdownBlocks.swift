@@ -3,6 +3,8 @@ import Foundation
 /// 마크다운 본문을 블록 단위 줄로 나누는 줄 기반 파서.
 /// 제목, 목록(중첩 · 번호 · 체크박스), 코드 블록, 인용, 표, 구분선을 알아본다.
 enum MarkdownBlocks {
+    enum Alignment { case left, center, right }
+
     enum Block {
         case text(String)
         case heading(level: Int, String)
@@ -10,7 +12,7 @@ enum MarkdownBlocks {
         case item(level: Int, marker: String, String)
         case quote(String)
         case code(language: String, lines: [String])
-        case table(header: [String], rows: [[String]])
+        case table(header: [String], alignments: [Alignment], rows: [[String]])
         case rule
         case blank
     }
@@ -92,6 +94,9 @@ enum MarkdownBlocks {
 
             if body.contains("|"), i + 1 < lines.count, isTableDelimiter(lines[i + 1]) {
                 let header = cells(body)
+                var alignments = alignments(lines[i + 1])
+                while alignments.count < header.count { alignments.append(.left) }
+                alignments = Array(alignments.prefix(header.count))
                 var rows: [[String]] = []
                 i += 2
                 while i < lines.count {
@@ -103,7 +108,7 @@ enum MarkdownBlocks {
                     i += 1
                 }
                 listIndents = []
-                out.append(.table(header: header, rows: rows))
+                out.append(.table(header: header, alignments: alignments, rows: rows))
                 continue
             }
 
@@ -267,6 +272,17 @@ enum MarkdownBlocks {
 
     private static func cells(_ body: Substring) -> [String] {
         rawCells(body).map { $0.replacingOccurrences(of: "\\|", with: "|") }
+    }
+
+    /// 구분 줄(`|:--|:-:|--:|`)에서 열 정렬을 읽는다.
+    private static func alignments(_ line: Substring) -> [Alignment] {
+        rawCells(splitIndent(line).1).map { part in
+            switch (part.hasPrefix(":"), part.hasSuffix(":")) {
+            case (true, true): return .center
+            case (false, true): return .right
+            default: return .left
+            }
+        }
     }
 
     private static func isTableDelimiter(_ line: Substring) -> Bool {
