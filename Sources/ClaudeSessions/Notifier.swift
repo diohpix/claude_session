@@ -69,7 +69,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         app.setActivationPolicy(.accessory)
         systemAuthorized { authorized in
             print("macOS 알림 권한: \(authorized ? "허용 → 알림 센터로 보냅니다" : "없음 → 앱이 직접 알림 창을 띄웁니다") / 설정 켜짐: \(Self.isEnabled)")
-            self.deliver(id: "check", title: "AI 세션", body: "시험 알림입니다.", pid: nil)
+            self.deliver(id: "check", title: "AI Sessions", body: "시험 알림입니다.", pid: nil)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + ToastCenter.lifetime + 1) { app.terminate(nil) }
         app.run()

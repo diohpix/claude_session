@@ -1,4 +1,4 @@
-# AI 세션
+# AI Sessions
 
 이 Mac에 쌓인 Claude Code와 Codex CLI 세션을 한 창에서 찾아보고, 대화 내용을 읽고, 터미널에서 다시 여는 macOS 앱입니다.
 
@@ -31,10 +31,10 @@ Claude는 `~/.claude/projects` 의 세션 기록(jsonl)과 `~/.claude/sessions` 
 
 ```sh
 ./build-app.sh
-open ClaudeSessions.app
+open "AI Sessions.app"
 ```
 
-릴리스 빌드를 한 뒤 `ClaudeSessions.app` 을 만들고 ad-hoc 서명을 합니다.
+릴리스 빌드를 한 뒤 `AI Sessions.app` 을 만들고 ad-hoc 서명을 합니다.
 
 번들 없이 바로 실행하려면:
 

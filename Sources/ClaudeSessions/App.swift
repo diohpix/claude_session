@@ -43,7 +43,7 @@ struct ClaudeSessionsApp: App {
     @State private var store = SessionStore()
 
     var body: some Scene {
-        WindowGroup("AI 세션") {
+        WindowGroup("AI Sessions") {
             ContentView()
                 .environment(store)
                 .frame(minWidth: 900, minHeight: 480)

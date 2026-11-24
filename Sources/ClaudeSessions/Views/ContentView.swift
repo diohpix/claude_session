@@ -45,7 +45,7 @@ struct ContentView: View {
                 )
             }
         }
-        .navigationTitle("AI 세션")
+        .navigationTitle("AI Sessions")
         .confirmationDialog(
             store.pendingDelete.count == 1
                 ? "이 세션을 휴지통으로 옮길까요?"
