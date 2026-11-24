@@ -78,7 +78,8 @@ private struct SessionRow: View {
     }
 }
 
-/// 도구의 고유 아이콘. 이 Mac에 설치된 Claude / Codex 앱의 아이콘을 빌려 쓰고, 앱이 없으면 기호로 대신한다.
+/// 도구의 고유 아이콘. 이 Mac에 설치된 Claude / Codex 앱의 아이콘을 빌려 쓰고,
+/// 앱이 없으면 빌드 때 번들에 담아 둔 아이콘을, 그것도 없으면 기호를 쓴다.
 struct SourceIcon: View {
     let source: SessionSource
     var size: CGFloat = 16
@@ -92,10 +93,11 @@ struct SourceIcon: View {
         case .claude: bundleIDs = ["com.anthropic.claudefordesktop"]
         case .codex: bundleIDs = ["com.openai.codex", "com.openai.chat"]
         }
-        let icon = bundleIDs.lazy
+        let installed = bundleIDs.lazy
             .compactMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }
             .first
             .map { NSWorkspace.shared.icon(forFile: $0.path) }
+        let icon = installed ?? Bundle.main.image(forResource: "source-\(source.rawValue)")
         cache[source] = icon
         return icon
     }
@@ -107,9 +109,19 @@ struct SourceIcon: View {
                 .interpolation(.high)
                 .frame(width: size, height: size)
         } else {
-            Image(systemName: source == .claude ? "sparkle" : "chevron.left.forwardslash.chevron.right")
+            Image(systemName: Self.symbolName(for: source))
                 .frame(width: size, height: size)
         }
+    }
+
+    static func symbolName(for source: SessionSource) -> String {
+        source == .claude ? "sparkle" : "chevron.left.forwardslash.chevron.right"
+    }
+
+    /// 대화 헤더처럼 NSImage가 필요한 곳에서 쓰는 아이콘. 앱 아이콘이 없으면 기호 이미지를 돌려준다.
+    @MainActor static func image(for source: SessionSource) -> NSImage? {
+        appIcon(for: source)
+            ?? NSImage(systemSymbolName: symbolName(for: source), accessibilityDescription: source.title)
     }
 }
 

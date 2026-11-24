@@ -48,7 +48,7 @@ struct TranscriptView: View {
                 return
             }
             let source = session.source
-            let icon = SourceIcon.appIcon(for: source)
+            let icon = SourceIcon.image(for: source)
             let parsed = await Task.detached(priority: .userInitiated) {
                 TranscriptDocument(messages: source.messages(url: url), source: source, icon: icon)
             }.value
