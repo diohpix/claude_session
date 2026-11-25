@@ -41,6 +41,8 @@ private enum Metrics {
 final class TranscriptDocument: @unchecked Sendable {
     let text: NSAttributedString
     var isEmpty: Bool { text.length == 0 }
+    private let messages: [ChatMessage]
+    private let source: SessionSource
 
     /// 아주 긴 붙여넣기 때문에 화면이 멈추지 않도록 메시지 하나의 표시 길이를 제한한다.
     private static let displayLimit = 20_000
@@ -51,7 +53,38 @@ final class TranscriptDocument: @unchecked Sendable {
             builder.append(message, limit: Self.displayLimit)
         }
         text = builder.result
+        self.messages = messages
+        self.source = source
     }
+
+    /// 대화 전체를 마크다운으로. 메시지 본문은 화면용으로 가공하기 전의 원문 그대로 넣는다.
+    func markdown(for session: SessionSummary) -> String {
+        var lines = ["# \(session.displayTitle)", ""]
+        lines.append("- 프로젝트: `\(session.projectPath)`")
+        if let branch = session.gitBranch { lines.append("- 브랜치: `\(branch)`") }
+        lines.append("- 세션: `\(session.sessionId)`")
+        let time = Date.FormatStyle(date: .numeric, time: .shortened)
+        for message in messages {
+            var heading = "## " + (message.role == .user ? "나" : source.title)
+            if let timestamp = message.timestamp { heading += " · " + timestamp.formatted(time) }
+            lines += ["", "---", "", heading, "", message.text.trimmingCharacters(in: .newlines)]
+            if !message.tools.isEmpty {
+                lines += ["", "_도구: \(toolSummary(message.tools))_"]
+            }
+        }
+        return lines.joined(separator: "\n") + "\n"
+    }
+}
+
+/// 도구 이름 목록을 "Bash ×3, Edit" 처럼 줄인다.
+private func toolSummary(_ tools: [String]) -> String {
+    var order: [String] = []
+    var counts: [String: Int] = [:]
+    for tool in tools {
+        if counts[tool] == nil { order.append(tool) }
+        counts[tool, default: 0] += 1
+    }
+    return order.map { counts[$0]! > 1 ? "\($0) ×\(counts[$0]!)" : $0 }.joined(separator: ", ")
 }
 
 private struct Builder {
@@ -337,16 +370,6 @@ private struct Builder {
         fonts[key] = made
         return made
     }
-
-    private func toolSummary(_ tools: [String]) -> String {
-        var order: [String] = []
-        var counts: [String: Int] = [:]
-        for tool in tools {
-            if counts[tool] == nil { order.append(tool) }
-            counts[tool, default: 0] += 1
-        }
-        return order.map { counts[$0]! > 1 ? "\($0) ×\(counts[$0]!)" : $0 }.joined(separator: ", ")
-    }
 }
 
 // MARK: - 뷰
@@ -501,7 +524,7 @@ private final class TranscriptNSTextView: NSTextView {
     /// 창 크기를 끄는 동안에는 텍스트 컨테이너가 뷰 폭을 따라가지 않고 손을 놓을 때에야 맞춰진다.
     /// 그래서 그 사이 글이 예전 폭으로 줄바꿈된 채 남고 새로 드러난 곳이 비어 보인다.
     /// 끄는 동안에도 컨테이너 폭을 직접 맞추고, 보이는 영역만 바로 다시 배치한다.
-    func layoutVisibleDuringLiveResize(widthChanged: Bool = false) {
+    func layoutVisibleDuringLiveResize() {
         guard inLiveResize, !isLayingOut,
               let layoutManager = textLayoutManager, let container = textContainer else { return }
         // 배치하면서 문서 높이가 바뀌면 이 함수가 다시 불리므로 막는다.
@@ -513,6 +536,58 @@ private final class TranscriptNSTextView: NSTextView {
         }
         layoutManager.textViewportLayoutController.layoutViewport()
         isLayingOut = false
+        needsDisplay = true
+    }
+
+    // MARK: 선택 표시
+
+    // 텍스트 뷰는 선택 표시를 글 뒤 층에 그리는데, 말풍선 배경이 그 위를 덮어 말풍선 안에서는 보이지 않는다.
+    // 그래서 `TranscriptFragment` 가 말풍선 배경 위에 선택 영역을 직접 칠한다.
+    // 여기서는 선택이 바뀔 때 앞뒤 선택 범위의 문단을 다시 그리게 한다.
+
+    private var lastSelection: [NSTextRange] = []
+
+    /// 선택 색. 창이 활성이고 이 뷰가 입력 초점을 가질 때만 강조색을 쓴다.
+    var selectionColor: NSColor {
+        window?.isKeyWindow == true && window?.firstResponder === self
+            ? .selectedTextBackgroundColor : .unemphasizedSelectedTextBackgroundColor
+    }
+
+    override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+        redrawSelection()
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        defer { redrawSelection() }
+        return super.becomeFirstResponder()
+    }
+
+    override func resignFirstResponder() -> Bool {
+        defer { redrawSelection() }
+        return super.resignFirstResponder()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        NotificationCenter.default.removeObserver(self, name: NSWindow.didBecomeKeyNotification, object: nil)
+        NotificationCenter.default.removeObserver(self, name: NSWindow.didResignKeyNotification, object: nil)
+        guard let window else { return }
+        for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(windowKeyChanged), name: name, object: window)
+        }
+    }
+
+    @objc private func windowKeyChanged() { redrawSelection() }
+
+    private func redrawSelection() {
+        guard let layoutManager = textLayoutManager else { return }
+        let current = layoutManager.textSelections.flatMap(\.textRanges).filter { !$0.isEmpty }
+        for range in lastSelection + current {
+            layoutManager.invalidateRenderingAttributes(for: range)
+        }
+        lastSelection = current
         needsDisplay = true
     }
 
@@ -587,6 +662,7 @@ private final class TranscriptFragment: NSTextLayoutFragment {
                 context.setFillColor(NSColor.labelColor.withAlphaComponent(0.06).cgColor)
                 fill(rect, radius: 6, top: panel.contains(.first), bottom: panel.contains(.last), in: context)
             }
+            drawSelection(at: point, in: context)
             if hasQuoteBar {
                 context.setFillColor(NSColor.tertiaryLabelColor.cgColor)
                 context.fill(CGRect(x: left + headIndent - 12, y: point.y, width: 3, height: frame.height))
@@ -600,6 +676,24 @@ private final class TranscriptFragment: NSTextLayoutFragment {
             context.restoreGState()
         }
         super.draw(at: point, in: context)
+    }
+
+    /// 이 문단 안의 선택 영역을 칠한다 (말풍선 배경에 가려지는 텍스트 뷰의 선택 표시 대신).
+    private func drawSelection(at point: CGPoint, in context: CGContext) {
+        guard let layoutManager = textLayoutManager,
+              let textView = layoutManager.textContainer?.textView as? TranscriptNSTextView else { return }
+        let frame = layoutFragmentFrame
+        var rects: [CGRect] = []
+        for range in layoutManager.textSelections.flatMap(\.textRanges) where !range.isEmpty {
+            guard let part = range.intersection(rangeInElement), !part.isEmpty else { continue }
+            layoutManager.enumerateTextSegments(in: part, type: .selection, options: .rangeNotRequired) { _, segment, _, _ in
+                rects.append(segment.offsetBy(dx: point.x - frame.minX, dy: point.y - frame.minY))
+                return true
+            }
+        }
+        guard !rects.isEmpty else { return }
+        context.setFillColor(textView.selectionColor.cgColor)
+        context.fill(rects)
     }
 
     /// 위 / 아래 모서리만 골라서 둥글린 사각형을 채운다.

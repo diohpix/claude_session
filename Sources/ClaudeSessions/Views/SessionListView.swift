@@ -165,36 +165,32 @@ struct SessionActions: View {
     @Environment(SessionStore.self) private var store
     let session: SessionSummary
     let live: LiveSession?
+    /// 아이콘만 보이는 상세 화면 버튼줄. "이어 열기 명령 복사" 를 터미널 버튼의 ▾ 메뉴 안에 넣는다.
+    /// (상세 화면의 복사 아이콘은 대화 내용을 마크다운으로 복사하는 버튼이다.)
+    var compact = false
     @AppStorage("terminal") private var terminal = TerminalApp.defaultApp.rawValue
 
     private var isLive: Bool { live != nil }
 
     var body: some View {
-        if let live {
-            Button("터미널로 이동", systemImage: "terminal") {
-                do {
-                    try TerminalLauncher.focusTerminal(of: live.pid)
-                } catch {
-                    store.errorMessage = error.localizedDescription
-                }
+        if compact {
+            Menu {
+                copyResumeCommand
+            } label: {
+                terminalLabel
+            } primaryAction: {
+                openTerminal()
             }
-            .help("이 세션이 열려 있는 터미널 앱을 앞으로 가져옵니다")
+            .menuStyle(.button)
+            .fixedSize()
+            .disabled(!canOpenTerminal)
+            .help(terminalHelp + " · ▾ 이어 열기 명령 복사")
         } else {
-            Button("터미널에서 이어 열기", systemImage: "terminal") {
-                do {
-                    try TerminalLauncher.resume(session, in: TerminalApp(rawValue: terminal) ?? .defaultApp)
-                } catch {
-                    store.errorMessage = error.localizedDescription
-                }
-            }
-            .disabled(session.cwd == nil || session.fileURL == nil)
-            .help("새 터미널 창에서 이 세션을 다시 엽니다")
+            Button(action: openTerminal) { terminalLabel }
+                .disabled(!canOpenTerminal)
+                .help(terminalHelp)
+            copyResumeCommand
         }
-
-        Button("이어 열기 명령 복사", systemImage: "doc.on.doc") {
-            if let cmd = session.resumeCommand { TerminalLauncher.copyToClipboard(cmd) }
-        }
-        .disabled(session.resumeCommand == nil)
 
         Button("Finder에서 폴더 열기", systemImage: "folder") {
             if let cwd = session.cwd { TerminalLauncher.revealInFinder(cwd) }
@@ -208,5 +204,36 @@ struct SessionActions: View {
         }
         .disabled(isLive || session.fileURL == nil)
         .help(isLive ? "실행 중인 세션은 삭제할 수 없습니다" : "세션 기록을 휴지통으로 옮깁니다")
+    }
+
+    private var terminalLabel: some View {
+        Label(isLive ? "터미널로 이동" : "터미널에서 이어 열기", systemImage: "terminal")
+    }
+
+    private var terminalHelp: String {
+        isLive ? "이 세션이 열려 있는 터미널 앱을 앞으로 가져옵니다" : "새 터미널 창에서 이 세션을 다시 엽니다"
+    }
+
+    private var canOpenTerminal: Bool {
+        isLive || (session.cwd != nil && session.fileURL != nil)
+    }
+
+    private var copyResumeCommand: some View {
+        Button("이어 열기 명령 복사", systemImage: "terminal") {
+            if let cmd = session.resumeCommand { TerminalLauncher.copyToClipboard(cmd) }
+        }
+        .disabled(session.resumeCommand == nil)
+    }
+
+    private func openTerminal() {
+        do {
+            if let live {
+                try TerminalLauncher.focusTerminal(of: live.pid)
+            } else {
+                try TerminalLauncher.resume(session, in: TerminalApp(rawValue: terminal) ?? .defaultApp)
+            }
+        } catch {
+            store.errorMessage = error.localizedDescription
+        }
     }
 }

@@ -8,6 +8,8 @@ struct TranscriptView: View {
     @State private var loaded = false
     /// 열린 세션이 tterm에서 돌고 있으면 그 tty. 입력창은 이때만 보인다.
     @State private var ttermTTY: String?
+    /// 방금 대화 내용을 복사했는지 (버튼 아이콘을 잠깐 체크 표시로 바꾼다).
+    @State private var copied = false
 
     private struct LoadKey: Hashable {
         let path: String?
@@ -58,6 +60,16 @@ struct TranscriptView: View {
         }
     }
 
+    private func copyMarkdown() {
+        guard let document else { return }
+        TerminalLauncher.copyToClipboard(document.markdown(for: session))
+        copied = true
+        Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            copied = false
+        }
+    }
+
     private var header: some View {
         let live = store.live[session.sessionId]
         return VStack(alignment: .leading, spacing: 6) {
@@ -69,7 +81,15 @@ struct TranscriptView: View {
                     .lineLimit(2)
                     .textSelection(.enabled)
                 Spacer()
-                SessionActions(session: session, live: live)
+                Button(copied ? "복사됨" : "대화 내용을 마크다운으로 복사",
+                       systemImage: copied ? "checkmark" : "doc.on.doc") {
+                    copyMarkdown()
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.bordered)
+                .disabled(document?.isEmpty ?? true)
+                .help("대화 내용을 마크다운으로 복사")
+                SessionActions(session: session, live: live, compact: true)
                     .labelStyle(.iconOnly)
                     .buttonStyle(.bordered)
             }
