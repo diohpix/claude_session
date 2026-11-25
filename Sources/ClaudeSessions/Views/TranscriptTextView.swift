@@ -449,6 +449,8 @@ struct TranscriptTextView: NSViewRepresentable {
         }
 
         @objc private func didResize() {
+            // 창이 커져 새로 드러난 부분을 크기 조절이 끝나기 전에 채운다.
+            (textView as? TranscriptNSTextView)?.layoutVisibleDuringLiveResize()
             guard pinnedToBottom, let textView else { return }
             isAdjusting = true
             textView.scrollToEndOfDocument(nil)
@@ -491,6 +493,27 @@ private final class TranscriptNSTextView: NSTextView {
         let widthChanged = newSize.width != frame.width
         super.setFrameSize(newSize)
         if widthChanged { needsDisplay = true }
+        layoutVisibleDuringLiveResize()
+    }
+
+    private var isLayingOut = false
+
+    /// 창 크기를 끄는 동안에는 텍스트 컨테이너가 뷰 폭을 따라가지 않고 손을 놓을 때에야 맞춰진다.
+    /// 그래서 그 사이 글이 예전 폭으로 줄바꿈된 채 남고 새로 드러난 곳이 비어 보인다.
+    /// 끄는 동안에도 컨테이너 폭을 직접 맞추고, 보이는 영역만 바로 다시 배치한다.
+    func layoutVisibleDuringLiveResize(widthChanged: Bool = false) {
+        guard inLiveResize, !isLayingOut,
+              let layoutManager = textLayoutManager, let container = textContainer else { return }
+        // 배치하면서 문서 높이가 바뀌면 이 함수가 다시 불리므로 막는다.
+        isLayingOut = true
+        let width = max(frame.width - textContainerInset.width * 2, 0)
+        if container.size.width != width {
+            container.size = NSSize(width: width, height: container.size.height)
+            layoutManager.invalidateLayout(for: layoutManager.documentRange)
+        }
+        layoutManager.textViewportLayoutController.layoutViewport()
+        isLayingOut = false
+        needsDisplay = true
     }
 
     /// 복사할 때 서식과 아이콘 자리 글자를 빼고 글만 넘긴다.
