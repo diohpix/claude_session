@@ -13,6 +13,8 @@ cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"  # scripts/make
 
 # 세션 목록의 Claude / Codex 아이콘 (Lobe Icons, MIT). 해당 앱이 설치된 Mac에서는 설치된 앱의 아이콘이 먼저 쓰인다.
 cp Resources/SourceIcons/source-*.png "$APP/Contents/Resources/"
+# 메뉴 "AI Sessions → 오픈소스 라이선스" 에서 보여 준다.
+cp Resources/ThirdPartyLicenses.txt "$APP/Contents/Resources/"
 
 cat > "$APP/Contents/Info.plist" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>

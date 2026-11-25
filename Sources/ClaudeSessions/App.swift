@@ -50,10 +50,53 @@ struct ClaudeSessionsApp: App {
                 .task { store.start() }
         }
         .defaultSize(width: 1280, height: 780)
+        .commands {
+            CommandGroup(after: .appInfo) {
+                LicensesMenuItem()
+            }
+        }
+
+        Window("오픈소스 라이선스", id: LicensesView.windowID) {
+            LicensesView()
+        }
+        .defaultSize(width: 620, height: 520)
+        .windowResizability(.contentMinSize)
 
         Settings {
             SettingsView()
         }
+    }
+}
+
+private struct LicensesMenuItem: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("오픈소스 라이선스…") { openWindow(id: LicensesView.windowID) }
+    }
+}
+
+/// 앱이 사용하는 오픈소스 목록과 라이선스 (`Resources/ThirdPartyLicenses.txt`).
+struct LicensesView: View {
+    static let windowID = "licenses"
+
+    private let text: String = {
+        guard let url = Bundle.main.url(forResource: "ThirdPartyLicenses", withExtension: "txt"),
+              let text = try? String(contentsOf: url, encoding: .utf8) else {
+            return "라이선스 파일을 찾지 못했습니다. build-app.sh 로 만든 앱에서 확인해 주세요."
+        }
+        return text
+    }()
+
+    var body: some View {
+        ScrollView {
+            Text(text)
+                .font(.system(.body, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(20)
+        }
+        .frame(minWidth: 480, minHeight: 320)
     }
 }
 
